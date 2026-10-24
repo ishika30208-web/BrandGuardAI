@@ -1,0 +1,214 @@
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>BrandGuardAI | Brand Governance</title>
+  <style>
+    * { box-sizing: border-box; }
+
+    body {
+      margin: 0;
+      font-family: "Segoe UI", Arial, sans-serif;
+      background: #0b1020;
+      color: #edf2ff;
+    }
+
+    header {
+      padding: 22px 7%;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      border-bottom: 1px solid #252e45;
+    }
+
+    .logo { font-size: 23px; font-weight: 750; }
+    .logo span { color: #8b9cff; }
+
+    .status { color: #8ee8bb; font-size: 13px; }
+
+    main {
+      width: min(1000px, 90%);
+      margin: 55px auto;
+    }
+
+    .tag {
+      color: #a6b3ff;
+      letter-spacing: 2px;
+      font-size: 12px;
+      font-weight: bold;
+    }
+
+    h1 { font-size: clamp(32px, 5vw, 52px); margin: 15px 0; }
+    .intro { color: #aab5cc; line-height: 1.7; max-width: 650px; }
+
+    .panel {
+      background: #131b30;
+      border: 1px solid #293653;
+      border-radius: 18px;
+      padding: 25px;
+      margin-top: 30px;
+    }
+
+    label { display: block; margin-bottom: 12px; font-weight: 600; }
+
+    textarea {
+      width: 100%;
+      min-height: 180px;
+      resize: vertical;
+      background: #0b1224;
+      color: white;
+      border: 1px solid #354363;
+      border-radius: 10px;
+      padding: 15px;
+      font: inherit;
+      line-height: 1.6;
+    }
+
+    textarea:focus { outline: 2px solid #8293ff; }
+
+    button {
+      margin-top: 16px;
+      padding: 13px 20px;
+      border: 0;
+      border-radius: 9px;
+      background: #8293ff;
+      color: #10152a;
+      font-weight: bold;
+      font-size: 15px;
+      cursor: pointer;
+    }
+
+    button:hover { background: #a4b0ff; }
+
+    #result {
+      margin-top: 20px;
+      color: #c7d2e8;
+      line-height: 1.7;
+      overflow-wrap: anywhere;
+    }
+
+    .note { font-size: 13px; color: #98a6c0; margin-top: 20px; }
+  </style>
+</head>
+<body>
+  <header>
+    <div class="logo">BrandGuard<span>AI</span></div>
+    <div class="status">● BRAND REVIEW WORKSPACE</div>
+  </header>
+
+  <main>
+    <div class="tag">PRE-PUBLICATION BRAND GOVERNANCE</div>
+    <h1>Protect your brand before you publish.</h1>
+    <p class="intro">
+      Review your content against brand rules, terminology and approved
+      facts. Identify potential issues before content goes live.
+    </p>
+
+    <section class="panel">
+      <label for="content">Content to review</label>
+      <textarea id="content"
+        placeholder="Paste your marketing copy, social media post or other content here..."></textarea>
+      <button id="reviewBtn">Review Content →</button>
+      <div id="result" aria-live="polite">
+        Your review results will appear here.
+      </div>
+      <p class="note">
+        Prototype interface: checking and AI analysis will be connected
+        in the next steps. Human review remains essential.
+      </p>
+    </section>
+  </main>
+
+  <script>
+  
+
+document.getElementById("reviewBtn").addEventListener("click", async function () {
+  const content = document.getElementById("content").value.trim();
+  const result = document.getElementById("result");
+  const button = document.getElementById("reviewBtn");
+
+  if (!content) {
+    result.textContent = "Please paste some content before starting a review.";
+    return;
+  }
+
+  button.disabled = true;
+  button.textContent = "Reviewing...";
+  result.textContent = "Analyzing content...";
+
+  try {
+    const response = await fetch("http://127.0.0.1:8000/review", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json"
+      },
+      body: JSON.stringify({ content: content })
+    });
+
+    if (!response.ok) {
+      throw new Error("Request failed: " + response.status);
+    }
+
+    const data = await response.json();
+    result.replaceChildren();
+
+    const heading = document.createElement("h3");
+    heading.textContent = "Brand Review Results";
+    result.appendChild(heading);
+
+    const summary = document.createElement("p");
+    summary.textContent = data.message || "Review complete.";
+    result.appendChild(summary);
+
+    if (data.findings && data.findings.length > 0) {
+      data.findings.forEach(function (finding) {
+        const card = document.createElement("div");
+        card.style.padding = "12px";
+        card.style.margin = "10px 0";
+        card.style.border = "1px solid #64748b";
+        card.style.borderRadius = "8px";
+
+        function addDetail(label, value) {
+          const paragraph = document.createElement("p");
+          const strong = document.createElement("strong");
+          strong.textContent = label + ": ";
+          paragraph.appendChild(strong);
+          paragraph.appendChild(
+            document.createTextNode(value || "Not provided")
+          );
+          card.appendChild(paragraph);
+        }
+
+        if (typeof finding === "string") {
+          addDetail("Finding", finding);
+        } else {
+          addDetail("Issue", finding.issue);
+          addDetail("Severity", finding.severity);
+          addDetail("Explanation", finding.explanation || finding.reason);
+          addDetail("Suggested fix", finding.suggested_fix);
+        }
+
+        result.appendChild(card);
+      });
+    }
+
+    const note = document.createElement("p");
+    note.textContent =
+      "Rule-based prototype only. Verify claims against approved brand sources. Human review remains essential.";
+    result.appendChild(note);
+
+  } catch (error) {
+    result.textContent =
+      "Could not connect to the backend. Make sure the Python server is running. " +
+      error.message;
+  } finally {
+    button.disabled = false;
+    button.textContent = "Review Content →";
+  }
+});
+
+  </script>
+</body>
+</html>

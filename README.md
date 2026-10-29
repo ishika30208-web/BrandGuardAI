@@ -1,29 +1,28 @@
-# BrandGuardAI
+# BrandGuardAI — Round 3 Upgrade
 
-## Overview
-BrandGuardAI is a prototype that reviews brand-related content and flags potentially risky or unsupported claims before publication.
+BrandGuardAI is a pre-publication brand governance prototype. It checks submitted copy against demo rules and configurable brand guidelines, compares copy with user-supplied reference passages, stores review history in SQLite, and provides JSON report downloads.
 
 ## Features
-- Reviews text submitted by the user.
-- Flags selected risky phrases and guarantee-related claims.
-- Shows issue severity, explanation, and a suggested fix.
-- Keeps human review essential.
+- Rule-based detection of guarantee, superiority, absolute and configured prohibited phrases.
+- Configurable approved claims, prohibited phrases and approved reference text.
+- Exact/substring reference matching with a transparent evidence status.
+- SQLite-backed review history and saved guidelines.
+- Reopen historical reviews and download JSON reports.
+- Health endpoint at `/health`; interactive API docs at `/docs`.
 
-## Technology Stack
-- HTML for the user interface
-- Python and FastAPI for the backend
-- Rule-based content checking
+## Technology
+HTML/CSS/JavaScript frontend; Python, FastAPI, Pydantic and SQLite backend.
 
-## How to Run Locally
-1. Install Python.
-2. Install dependencies: `python -m pip install fastapi "uvicorn[standard]"`
-3. Start the backend: `python -m uvicorn app:app --reload`
-4. Open the frontend `index.html` using a local web server.
+## Run locally
+1. Install Python 3.10 or newer.
+2. In this folder run `python -m pip install -r requirements.txt`.
+3. Run `python -m uvicorn app:app --reload`.
+4. Open `index.html` using a local web server. The included frontend is configured to use the deployed API; for local testing change `API_BASE` in `index.html` to `http://127.0.0.1:8000`.
+
+## Deployment
+- Frontend: GitHub Pages from the repository root and `main` branch.
+- Backend: Render Web Service with build command `pip install -r requirements.txt` and start command `uvicorn app:app --host 0.0.0.0 --port $PORT`.
+- For persistent review history, configure a durable mounted disk and set `DATABASE_PATH` to a file on that disk (example: `/var/data/brandguardai.db`) or use a managed database. SQLite stored on an ephemeral filesystem can be lost after service replacement/redeployment.
 
 ## Limitations
-This is an early rule-based prototype, not a fully AI-powered verification system. It does not independently verify claims against official brand guidelines or external evidence. Human review is required.
-
-## Future Improvements
-- Add configurable brand guidelines.
-- Improve claim detection and evidence references.
-- Add review history and exportable reports.
+This is a rule-based prototype, not an autonomous AI fact-checker. Evidence matching is exact/substring comparison against reference text supplied by the user. It does not fetch official sources or determine whether a claim is objectively true. No detected issue does not guarantee content is safe. Human verification is required.

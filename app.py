@@ -1,9 +1,19 @@
 
-from fastapi import FastAPI
-from pydantic import BaseModel
-from fastapi.middleware.cors import CORSMiddleware
+from datetime import datetime
+from threading import Lock
+from typing import Optional
 
-app = FastAPI(title="BrandGuardAI API")
+from fastapi import FastAPI, HTTPException
+from fastapi.middleware.cors import CORSMiddleware
+from pydantic import BaseModel, Field
+
+
+app = FastAPI(
+    title="BrandGuardAI API",
+    description="Rule-based brand content review prototype.",
+    version="1.1.0",
+)
+
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
@@ -14,55 +24,34 @@ app.add_middleware(
 
 
 class ReviewRequest(BaseModel):
-    content: str
+    content: str = Field(
+        ...,
+        min_length=1,
+        max_length=10000,
+        description="Brand content to review",
+    )
 
 
-@app.get("/")
-def home():
-    return {
-        "message": "BrandGuardAI backend is running!"
-    }
+reviews = {}
+next_review_id = 1
+review_lock = Lock()
 
 
-@app.post("/review")
-@app.post("/review")
-def review_content(request: ReviewRequest):
-    content = request.content.strip()
-
-    if not content:
-        return {
-            "findings": [],
-            "message": "Please provide content to review."
-        }
-
+def detect_findings(content: str):
     findings = []
-    lower_content = content.lower()
+    text = content.lower()
 
-    risky_phrases = [
-        "best product in the world",
-        "guaranteed results",
-        "100% guaranteed"
+    # Rule 1: Guarantee-related claims
+    guarantee_phrases = [
+        "guarantee",
+        "guaranteed",
+        "100% results",
+        "instant results",
+        "risk-free",
+        "risk free",
     ]
 
-    for phrase in risky_phrases:
-        if phrase in lower_content:
-            findings.append({
-                "issue": phrase,
-                "severity": "Medium",
-                "explanation": (
-                    "This claim may be difficult to verify "
-                    "without approved supporting evidence."
-                ),
-                "suggested_fix": (
-                    "Provide approved evidence for this claim, "
-                    "or replace it with a specific, verifiable benefit."
-                )
-            })
-
-    if "guarantee" in lower_content and not any(
-        "guarantee" in finding["issue"].lower()
-        for finding in findings
-    ):
+    if any(phrase in text for phrase in guarantee_phrases):
         findings.append({
             "issue": "Guarantee claim",
             "severity": "Medium",
@@ -71,19 +60,150 @@ def review_content(request: ReviewRequest):
                 "against approved brand evidence."
             ),
             "suggested_fix": (
-                "Check the approved terms and conditions, "
-                "and rewrite the claim if it is not supported."
-            )
+                "Check approved terms and conditions and rewrite "
+                "the claim if it is not supported."
+            ),
+            "evidence": [],
+            "evidence_status": "No matching reference found",
         })
 
+    # Rule 2: Broad superiority claims
+    superiority_phrases = [
+        "best in the world",
+        "best product",
+        "number one",
+        "number 1",
+        "no. 1",
+        "world's best",
+        "world’s best",
+        "greatest product",
+        "the best",
+    ]
+
+    if any(phrase in text for phrase in superiority_phrases):
+        findings.append({
+            "issue": "Unverifiable superiority claim",
+            "severity": "Medium",
+            "explanation": (
+                "A broad superiority claim may require objective "
+                "supporting evidence from approved brand sources."
+            ),
+            "suggested_fix": (
+                "Replace the broad claim with a specific, "
+                "verifiable benefit supported by evidence."
+            ),
+            "evidence": [],
+            "evidence_status": "No matching reference found",
+        })
+
+    # Rule 3: Absolute claims
+    absolute_phrases = [
+        "always works",
+        "works for everyone",
+        "100% effective",
+        "zero side effects",
+        "completely safe",
+        "never fails",
+    ]
+
+    if any(phrase in text for phrase in absolute_phrases):
+        findings.append({
+            "issue": "Absolute or unqualified claim",
+            "severity": "High",
+            "explanation": (
+                "An absolute claim may be misleading if it lacks "
+                "reliable evidence and appropriate qualifications."
+            ),
+            "suggested_fix": (
+                "Verify the claim with approved evidence and add "
+                "necessary limitations or qualifications."
+            ),
+            "evidence": [],
+            "evidence_status": "No matching reference found",
+        })
+
+    return findings
+
+
+@app.get("/")
+def home():
     return {
-        "findings": findings,
-        "message": (
-            "Potential issues found."
-            if findings
-            else "No demo-rule matches found. Human review is still required."
-        ),
-        "review_type": "Rule-based prototype",
-        "human_review_required": True
+        "message": "BrandGuardAI API is running.",
+        "docs": "/docs",
+        "review_endpoint": "POST /review",
+        "history_endpoint": "GET /history/{review_id}",
     }
 
+
+@app.get("/health")
+def health():
+    return {"status": "healthy"}
+
+
+@app.post("/review")
+def review_content(request: ReviewRequest):
+    global next_review_id
+
+    content = request.content.strip()
+
+    if not content:
+        raise HTTPException(
+            status_code=422,
+            detail="Please paste some content before starting a review.",
+        )
+
+    findings = detect_findings(content)
+
+    with review_lock:
+        review_id = next_review_id
+        next_review_id += 1
+
+        report = {
+            "report_type": "BrandGuardAI Review Report",
+            "review_id": review_id,
+            "created_at": datetime.now().astimezone().isoformat(
+                timespec="seconds"
+            ),
+            "content": content,
+            "findings": findings,
+            "message": (
+                "Potential issues found."
+                if findings
+                else "No demo-rule matches found. "
+                     "Human review is still required."
+            ),
+            "disclaimer": (
+                "Rule-based preliminary review only. Evidence matches "
+                "do not prove a claim is true. No detected issue does "
+                "not guarantee that content is safe. Human verification "
+                "is required."
+            ),
+        }
+
+        reviews[review_id] = report
+
+    return report
+
+
+@app.get("/history/{review_id}")
+def get_review_history(review_id: int):
+    with review_lock:
+        report = reviews.get(review_id)
+
+    if report is None:
+        raise HTTPException(
+            status_code=404,
+            detail="Review not found. Create a review first.",
+        )
+
+    return report
+
+@app.get("/history")
+def list_review_history():
+    with review_lock:
+        history = list(reviews.values())
+
+    return {
+        "total_reviews": len(history),
+        "reviews": history,
+    }
